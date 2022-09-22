@@ -1,242 +1,114 @@
-#if 1
-#include <stdio.h>
-#include <unistd.h>
-#include <stdlib.h>
+#include <sys/mman.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <unistd.h>
+#include <linux/fb.h>
 #include <fcntl.h>
+#include <stdio.h>
+#include <string.h>
 #include <sys/ioctl.h>
-#include "font.h"
 
-// ./oled_test /dev/100ask_oled
+// ./oled_test <dev>
 
-#define OLED_SET_XY 99
-#define OLED_SET_XY_WRITE_DATA 100  // IO()
-#define OLED_SET_XY_WRITE_DATAS 101 // IO()
-#define OLED_SET_DATAS 102          //低8位表示ioctl 高位表示数据长度
+static int fd_fb;
+static struct fb_var_screeninfo var; /* Current var */
+static int screen_size;
+static unsigned char *fb_base;
+static unsigned int line_width;
+static unsigned int pixel_width;
 
-int fd_oled;
-
-void OLED_DIsp_Char(int x, int y, unsigned char c)
+/**********************************************************************
+ * 函数名称： lcd_put_pixel
+ * 功能描述： 在LCD指定位置上输出指定颜色（描点）
+ * 输入参数： x坐标，y坐标，颜色
+ * 输出参数： 无
+ * 返 回 值： 会
+ * 修改日期        版本号     修改人	      修改内容
+ * -----------------------------------------------
+ * 2020/05/12	     V1.0	  zh(angenao)	      创建
+ ***********************************************************************/
+void lcd_put_pixel(int x, int y, unsigned int color)
 {
-    int i = 0;
-    char pos[2];
+    unsigned char *pen_8 = fb_base + y * line_width + x * pixel_width;
+    unsigned short *pen_16;
+    unsigned int *pen_32;
 
-    /* 得到字模 */
-    const unsigned char *dots = oled_asc2_8x16[c - ' '];
-#if 0
-    /* 发给OLED */
-    OLED_DIsp_Set_Pos(x, y);
-    /* 发出8字节数据 */
-    for (i = 0; i < 8; i++)
-        oled_write_cmd_data(dots[i], OLED_DATA);
-#endif
-    pos[0] = x;
-    pos[1] = y;
-    ioctl(fd_oled, OLED_SET_XY, pos);
-    ioctl(fd_oled, OLED_SET_DATAS | (8 << 8), dots);
-#if 0
-    OLED_DIsp_Set_Pos(x, y + 1);
-    /* 发出8字节数据 */
-    for (i = 0; i < 8; i++)
-        oled_write_cmd_data(dots[i + 8], OLED_DATA);
-#endif
-    pos[0] = x;
-    pos[1] = y + 1;
-    ioctl(fd_oled, OLED_SET_XY, pos);
-    ioctl(fd_oled, OLED_SET_DATAS | (8 << 8), &dots[8]);
-}
+    unsigned int red, green, blue;
 
-void OLED_DIsp_String(int x, int y, char *str)
-{
-    unsigned char j = 0;
-    while (str[j])
+    pen_16 = (unsigned short *)pen_8;
+    pen_32 = (unsigned int *)pen_8;
+
+    switch (var.bits_per_pixel)
     {
-        OLED_DIsp_Char(x, y, str[j]); //显示单个字符
-        x += 8;
-        if (x > 127)
-        {
-            x = 0;
-            y += 2;
-        } //移动显示位置
-        j++;
+    case 8:
+    {
+        *pen_8 = color;
+        break;
+    }
+    case 16:
+    {
+        /* 565 */
+        red = (color >> 16) & 0xff;
+        green = (color >> 8) & 0xff;
+        blue = (color >> 0) & 0xff;
+        color = ((red >> 3) << 11) | ((green >> 2) << 5) | (blue >> 3);
+        *pen_16 = color;
+        break;
+    }
+    case 32:
+    {
+        *pen_32 = color;
+        break;
+    }
+    default:
+    {
+        printf("can't surport %dbpp\n", var.bits_per_pixel);
+        break;
+    }
     }
 }
 
-void OLED_DIsp_CHinese(unsigned char x, unsigned char y, unsigned char no)
-{
-    unsigned char t, adder = 0;
-    char pos[2];
-    pos[0] = x;
-    pos[1] = y;
-    ioctl(fd_oled, OLED_SET_XY, pos);
-
-    for (t = 0; t < 16; t++)
-    { //显示上半截字符
-        // oled_write_cmd_data(hz_1616[no][t * 2], OLED_DATA);
-        ioctl(fd_oled, OLED_SET_DATAS | (1 << 8), &hz_1616[no][t * 2]);
-        adder += 1;
-    }
-    pos[0] = x;
-    pos[1] = y + 1;
-    ioctl(fd_oled, OLED_SET_XY, pos);
-    // OLED_DIsp_Set_Pos(x, y + 1);
-    for (t = 0; t < 16; t++)
-    { //显示下半截字符
-        // oled_write_cmd_data(hz_1616[no][t * 2 + 1], OLED_DATA);
-        ioctl(fd_oled, OLED_SET_DATAS | (1 << 8), &hz_1616[no][t * 2 + 1]);
-        adder += 1;
-    }
-}
-
-void OLED_DIsp_Test(void)
+int main(int argc, char **argv)
 {
     int i;
-    OLED_DIsp_String(0, 0, "yo! it's a good day!");
-#if 0
-    OLED_DIsp_String(0, 0, "wiki.100ask.net");
-    OLED_DIsp_String(0, 2, "book.100ask.net");
-    OLED_DIsp_String(0, 4, "bbs.100ask.net");
-#endif
-#if 0
-    for (i = 0; i < 3; i++)
-    { //显示汉字 百问网
-        OLED_DIsp_CHinese(32 + i * 16, 6, i);
-    }
-#endif
-}
-
-int main(int argc, char *argv[])
-{
-
-    int buf[2];
 
     if (argc != 2)
     {
-        printf("Usage : %s <dev> \n", argv[0]);
-
+        printf("Usage: %s <dev>\n", argv[0]);
         return -1;
     }
-
-    fd_oled = open(argv[1], O_RDWR);
-    if (fd_oled < 0)
+    fd_fb = open("argv[1]", O_RDWR);
+    if (fd_fb < 0)
     {
-        printf(" can not open dev %s\n", argv[0]);
+        printf("can't open %S\n", argv[1]);
+        return -1;
+    }
+    if (ioctl(fd_fb, FBIOGET_VSCREENINFO, &var))
+    {
+        printf("can't get var\n");
         return -1;
     }
 
-    OLED_DIsp_Test();
+    printf("LCD info: %d x %d %dbpp\n", var.xres, var.yres, var.bits_per_pixel);
+    line_width = var.xres * var.bits_per_pixel / 8;
+    pixel_width = var.bits_per_pixel / 8;
+    screen_size = var.xres * var.yres * var.bits_per_pixel / 8;
+    fb_base = (unsigned char *)mmap(NULL, screen_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd_fb, 0);
+    if (fb_base == (unsigned char *)-1)
+    {
+        printf("can't mmap\n");
+        return -1;
+    }
+
+    /* 清屏: 全部设为白色 */
+    memset(fb_base, 0xff, screen_size);
+
+    /* 随便设置出100个为红色 */
+    for (i = 0; i < 100; i++)
+        lcd_put_pixel(var.xres / 2 + i, var.yres / 2, 0xFF0000);
+
+    munmap(fb_base, screen_size);
+    close(fd_fb);
 
     return 0;
 }
-#endif
-
-#if 0
-#include <stdio.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <sys/ioctl.h>
-#include "font.h"
-
-// ./oled_test
-
-#define OLED_SET_XY 99
-#define OLED_SET_XY_WRITE_DATA 100  // IO()
-#define OLED_SET_XY_WRITE_DATAS 101 // IO()
-#define OLED_SET_DATAS 102          //低8位表示ioctl 高位表示数据长度
-
-int fd_oled;
-int fd_sr04;
-char dis_buf[10];
-
-void OLED_DIsp_Char(int x, int y, unsigned char c)
-{
-    int i = 0;
-    char pos[2];
-
-    /* 得到字模 */
-    const unsigned char *dots = oled_asc2_8x16[c - ' '];
-    pos[0] = x;
-    pos[1] = y;
-    ioctl(fd_oled, OLED_SET_XY, pos);
-    ioctl(fd_oled, OLED_SET_DATAS | (8 << 8), dots);
-
-    pos[0] = x;
-    pos[1] = y + 1;
-    ioctl(fd_oled, OLED_SET_XY, pos);
-    ioctl(fd_oled, OLED_SET_DATAS | (8 << 8), &dots[8]);
-}
-
-void OLED_DIsp_String(int x, int y, char *str)
-{
-    unsigned char j = 0;
-    while (str[j])
-    {
-        OLED_DIsp_Char(x, y, str[j]); //显示单个字符
-        x += 8;
-        if (x > 127)
-        {
-            x = 0;
-            y += 2;
-        } //移动显示位置
-        j++;
-    }
-}
-
-int get_distance()
-{
-    int ret;
-    int dis_mm;
-    int buf_ns;
-    ret = sizeof(int);
-
-    if (read(fd_sr04, &buf_ns, sizeof(int)) == ret)
-    {
-        dis_mm = buf_ns * 340 / 2 / 1000000;
-    }
-    else
-    {
-        printf("get distence: -1\n");
-    }
-    return dis_mm;
-}
-
-int main(int argc, char *argv[])
-{
-
-    int buf[2];
-    int dis_mm;
-
-    fd_oled = open("/dev/100ask_oled", O_RDWR);
-    if (fd_oled < 0)
-    {
-        printf(" can not open dev 100ask_oled\n");
-        return -1;
-    }
-    // fd_sr04 = open("/dev/100ask_sr04", O_RDWR);
-    // if (fd_sr04 < 0)
-    // {
-    //     printf(" can not open dev 100ask_sr04\n");
-    //     return -1;
-    // }
-    OLED_DIsp_String(0, 0, "welcome!");
-#if 0
-    while (1)
-    {
-        dis_mm = get_distance();
-
-        dis_buf[9] = dis_mm % 10;
-        dis_buf[8] = dis_mm / 10 % 10;
-        dis_buf[7] = dis_mm / 100 % 10;
-        dis_buf[6] = dis_mm / 1000 % 10;
-        dis_buf[5] = dis_mm / 10000 % 10;
-
-        OLED_DIsp_String(2, 2, dis_buf);
-    }
-#endif
-    return 0;
-}
-#endif

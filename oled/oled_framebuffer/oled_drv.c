@@ -47,10 +47,49 @@ static struct class * oled_class;
 static struct spi_device* spi_dev;
 static struct gpio_desc* oled_dc_pin;
 static struct fb_info *oled_fb_info;
+static unsigned int pseudo_palette[16];
 
 static unsigned char param_buf[3];
 static unsigned char data_buf[1024];
+//？
+static int mylcd_setcolreg(unsigned regno,
+			       unsigned red, unsigned green, unsigned blue,
+			       unsigned transp, struct fb_info *info)
+{
+	unsigned int val;
 
+	/* dprintk("setcol: regno=%d, rgb=%d,%d,%d\n",
+		   regno, red, green, blue); */
+
+	switch (info->fix.visual) {
+	case FB_VISUAL_TRUECOLOR:
+		/* true-colour, use pseudo-palette */
+
+		if (regno < 16) {
+			u32 *pal = info->pseudo_palette;
+
+			val  = chan_to_field(red,   &info->var.red);
+			val |= chan_to_field(green, &info->var.green);
+			val |= chan_to_field(blue,  &info->var.blue);
+
+			pal[regno] = val;
+		}
+		break;
+
+	default:
+		return 1;	/* unknown type */
+	}
+
+	return 0;
+}
+
+static struct fb_ops myfb_ops = {
+	.owner		= THIS_MODULE,
+	.fb_setcolreg	= mylcd_setcolreg,
+	.fb_fillrect	= cfb_fillrect,
+	.fb_copyarea	= cfb_copyarea,
+	.fb_imageblit	= cfb_imageblit,
+};
 
 
 static void oled_write_cmd_data(unsigned char uc_data,unsigned char uc_cmd)
@@ -191,8 +230,8 @@ static int oled_drv_probe(struct spi_device *spi)
 		
 	
 	/* c. fbops */
-	//oled_fb_info->fbops = &myfb_ops;
-	//oled_fb_info->pseudo_palette = pseudo_palette;
+	oled_fb_info->fbops = &myfb_ops;//必须要有fbops 不然会出错
+	oled_fb_info->pseudo_palette = pseudo_palette;
 	
 	register_framebuffer(oled_fb_info);
 	
@@ -206,8 +245,8 @@ static int oled_drv_probe(struct spi_device *spi)
 static int oled_drv_remove(struct spi_device *spi)
 {
 	printk("%s %s %d\n",__FILE__,__FUNCTION__,__LINE__);
-	
-
+	unregister_framebuffer(oled_fb_info);
+	framebuffer_release(oled_fb_info);
 	
 	return 0;
 
