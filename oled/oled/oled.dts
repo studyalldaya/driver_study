@@ -1,0 +1,11 @@
+&spi1 {
+
+	cs-gpios = <&gpio4 26 GPIO_ACTIVE_LOW>;
+	oled: oled {
+		compatible = "100ask,oled";
+		reg = <0>;
+		spi-max-frequency = <>;
+		dc-gpios = <&gpio4 20 GPIO_ACTIVE_LOW>;
+	};
+
+};

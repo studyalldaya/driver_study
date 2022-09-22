@@ -1,0 +1,11 @@
+&spi1 {
+
+	cs-gpios = <&gpio4 26 GPIO_ACTIVE_LOW>;
+	DAC: DAC {
+		compatible = "100ask,DAC";
+		reg = <0>;
+		spi-max-frequency = <1000000>;//默认CPOL和CPHA都是0
+		
+	};
+
+};
