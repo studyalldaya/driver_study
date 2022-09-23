@@ -51,7 +51,18 @@ static unsigned int pseudo_palette[16];
 
 static unsigned char param_buf[3];
 static unsigned char data_buf[1024];
+
+
 //？
+
+static inline unsigned int chan_to_field(unsigned int chan,
+					 struct fb_bitfield *bf)
+{
+	chan &= 0xffff;
+	chan >>= 16 - bf->length;
+	return chan << bf->offset;
+}
+
 static int mylcd_setcolreg(unsigned regno,
 			       unsigned red, unsigned green, unsigned blue,
 			       unsigned transp, struct fb_info *info)
@@ -209,10 +220,9 @@ static int oled_drv_probe(struct spi_device *spi)
 		
 	
 	/* b. fix 固定屏幕信息*/
-	strcpy(oled_fb_info->fix.id, "100ask_lcd");
+	strcpy(oled_fb_info->fix.id, "100ask_oled");
 	oled_fb_info->fix.smem_len = oled_fb_info->var.xres * oled_fb_info->var.yres * oled_fb_info->var.bits_per_pixel / 8;
-	if (oled_fb_info->var.bits_per_pixel == 24)
-		oled_fb_info->fix.smem_len = oled_fb_info->var.xres * oled_fb_info->var.yres * 4;
+	
 	
 	
 	/* fb的虚拟地址 */
@@ -225,8 +235,7 @@ static int oled_drv_probe(struct spi_device *spi)
 	oled_fb_info->fix.visual = FB_VISUAL_MONO10;//黑白屏
 	
 	oled_fb_info->fix.line_length = oled_fb_info->var.xres * oled_fb_info->var.bits_per_pixel / 8;
-	if (oled_fb_info->var.bits_per_pixel == 24)
-		oled_fb_info->fix.line_length = oled_fb_info->var.xres * 4;
+	
 		
 	
 	/* c. fbops */
