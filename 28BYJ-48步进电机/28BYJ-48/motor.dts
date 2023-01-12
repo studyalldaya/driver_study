@@ -1,0 +1,11 @@
+/{
+	motor_dev {
+		compatible = "100ask,motor";
+		motor-gpios = <&gpio4 19 GPIO_ACTIVE_HIGH
+				&gpio4 20 GPIO_ACTIVE_HIGH
+				&gpio4 21 GPIO_ACTIVE_HIGH
+				&gpio4 22 GPIO_ACTIVE_HIGH>;
+		
+	};
+
+};
